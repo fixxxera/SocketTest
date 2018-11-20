@@ -80,34 +80,55 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         protected Void doInBackground(Void... voids) {
-            DatagramSocket socket = null;
-            try {
-                socket = new DatagramSocket(7432);
-                byte[] msg = new byte[]{0,2,9,0,4};
-                Log.d("sending", "Sending data " + Arrays.toString(msg));
-
-                DatagramPacket packet = new DatagramPacket(msg, msg.length,
-                        InetAddress.getByName("255.255.255.255"), 7432);
-                socket.send(packet);
-            } catch (SocketException e) {
-                e.printStackTrace();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-            byte[] buf = new byte[1024];
-            try {
-                while (true) {
-                    DatagramPacket packet = new DatagramPacket(buf, buf.length);
-                    assert socket != null;
-                    socket.receive(packet);
-                    String s = String.valueOf(packet.getAddress());
-                    Log.d("response", "Received response " + s);
-                }
-            } catch (SocketTimeoutException e) {
-                Log.d("timeout", "Receive timed out");
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
+            DatagramSocket c;
+		try {
+			c = new DatagramSocket();
+			c.setBroadcast(true);
+			byte[] sendData = new byte[] { 0, 2, 9, 0, 4 };
+			try {
+				DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length,
+						InetAddress.getByName("255.255.255.255"), 7432);
+				c.send(sendPacket);
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+			@SuppressWarnings("rawtypes")
+			Enumeration interfaces = NetworkInterface.getNetworkInterfaces();
+			while (interfaces.hasMoreElements()) {
+				NetworkInterface networkInterface = (NetworkInterface) interfaces.nextElement();
+				if (networkInterface.isLoopback() || !networkInterface.isUp()) {
+					continue;
+				}
+				for (InterfaceAddress interfaceAddress : networkInterface.getInterfaceAddresses()) {
+					InetAddress broadcast = interfaceAddress.getBroadcast();
+					if (broadcast == null) {
+						continue;
+					}
+					try {
+						DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, broadcast, 7432);
+						c.send(sendPacket);
+					} catch (Exception e) {
+						e.printStackTrace();
+					}
+				}
+			}
+			while (true) {
+				try {
+					byte[] recvBuf = new byte[160];
+					DatagramPacket receivePacket = new DatagramPacket(recvBuf, recvBuf.length);
+					c.receive(receivePacket);
+					c.setSoTimeout(5000);
+					String message = new String(receivePacket.getData()).trim();
+					System.out.println(receivePacket.getAddress().toString().replace("/", ""));
+				} catch (SocketTimeoutException e) {
+					break;
+				}
+			}
+			c.close();
+		} catch (IOException ex) {
+			ex.printStackTrace();
+		}
+	}
             return null;
         }
     }
